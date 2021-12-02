@@ -37,9 +37,8 @@ def get_middle_strip(img, n_strips=5):
     return img[:, left_strip_bound: right_strip_bound]
 
 
-def get_filtered_image(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    img_middle = get_middle_strip(gray)
+def filter_image(img):
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     size = 10
     kern = cv2.getGaborKernel(
         (size, size),
@@ -52,14 +51,15 @@ def get_filtered_image(img):
     kern[kern > 0] /= kern[kern > 0].sum()
     kern[kern < 0] /= np.abs(kern[kern < 0].sum())
 
-    gradient = cv2.filter2D(img_middle, -1, kern)
+    gradient = cv2.filter2D(img_gray, -1, kern)
     binary_img = (gradient > 8).astype('uint8')
 
     open_kernel = np.ones((2, 15))
     binary_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, open_kernel)
 
     close_kernel = np.ones((2, 30))
-    return cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, close_kernel)
+    binary_img = cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, close_kernel)
+    return binary_img
 
 
 if __name__ == '__main__':
