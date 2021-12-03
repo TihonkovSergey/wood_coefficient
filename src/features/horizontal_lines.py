@@ -3,15 +3,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+import json
 from pathlib import Path
 from tqdm import tqdm
 import cv2
 import imageio
 import imutils
+from joblib import Parallel, delayed
 
 from src.data.data_load import get_image_by_path
 from src.data.data_preprocessing import get_middle_strip, filter_image
-from definitions import DATA_DIR
+from definitions import DATA_DIR, N_STRIPS
 
 
 def get_lines_from_image(img):
@@ -25,7 +27,7 @@ def get_lines_from_image(img):
     return lines, img_middle_with_lines
 
 
-def get_lines_from_image_connectivity(img):
+def get_lines_from_image_connectivity(img, return_used=False):
     def fill_component(x, y, color):
         min_x, max_x = w, 0
         min_y, max_y = h, 0
@@ -44,12 +46,12 @@ def get_lines_from_image_connectivity(img):
                     stack.append((curr_x, curr_y))
         return {
             "x": {
-                "min": min_x,
-                "max": max_x,
+                "min": int(min_x),
+                "max": int(max_x),
             },
             "y": {
-                "min": min_y,
-                "max": max_y,
+                "min": int(min_y),
+                "max": int(max_y),
             }
         }
 
@@ -64,8 +66,49 @@ def get_lines_from_image_connectivity(img):
             color += 1
             line_info = fill_component(x, y, color)
             line_info_list.append(line_info)
-    return line_info_list, used
+    if return_used:
+        return line_info_list, used
+    return line_info_list
+
+
+def all_lines_for_track(path, scale=0.25):
+    def pipeline(path, scale):
+        img = get_image_by_path(path, scale=scale, prepared=True)
+        filtered_img = filter_image(img)
+        return get_lines_from_image_connectivity(filtered_img)
+
+    path_to_front_dir = Path(path).joinpath("FrontJPG")
+    result = []
+    try:
+        n = len(list(path_to_front_dir.glob("*.jpg")))
+        result = Parallel(n_jobs=8)(
+            delayed(pipeline)(
+                path_to_front_dir.joinpath(f"front{i}.jpg"), scale
+            )
+            for i in range(n)
+        )
+
+        return {
+            "path": str(path),
+            "lines": result,
+        }
+    except Exception as e:
+        return {
+            "path": str(path),
+            "lines": result,
+            "error": str(e),
+        }
 
 
 if __name__ == '__main__':
+    # find all lines for each track
+    # with open(DATA_DIR.joinpath('good_paths.txt')) as f:
+    #     good_paths = f.readlines()
+    #     good_paths = [p.strip() for p in good_paths]
+    #
+    # for p in tqdm(good_paths):
+    #     path = DATA_DIR.joinpath("part_1").joinpath(p)
+    #     all_lines = all_lines_for_track(path)
+    #     with open(path.joinpath("all_lines.json"), "w") as file:
+    #         json.dump(all_lines, file, indent=4)
     pass
