@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import json
+from copy import copy
 from pathlib import Path
 from tqdm import tqdm
 import cv2
@@ -100,15 +101,194 @@ def all_lines_for_track(path, scale=0.25):
         }
 
 
+def count_line_metrics(all_lines, w=480):
+    left_strip_bound = (w // 2) - int(w / (2 * N_STRIPS))
+    right_strip_bound = (w // 2) + int(w / (2 * N_STRIPS))
+    w_strip = right_strip_bound - left_strip_bound
+    length_threshold = w_strip * 0.3
+
+    full_in_strip = []
+    start_in_strip = []
+    end_in_strip = []
+    for lines in all_lines["lines"]:
+        c_full = 0
+        c_start = 0
+        c_end = 0
+        for line in lines:
+            start = line["x"]["min"]
+            end = line["x"]["max"]
+            length = end - start
+            if start <= left_strip_bound and end >= right_strip_bound:
+                c_full += 1
+                continue
+            if start > left_strip_bound \
+                    and end < right_strip_bound \
+                    and length > length_threshold:
+                c_start += 1
+                c_end += 1
+            else:
+                if start < left_strip_bound < end \
+                        and (end - left_strip_bound) > length_threshold:
+                    c_end += 1
+                if end >= right_strip_bound > start \
+                        and (right_strip_bound - start) > length_threshold:
+                    c_start += 1
+        full_in_strip.append(c_full)
+        start_in_strip.append(c_start)
+        end_in_strip.append(c_end)
+    middle_in_strip = [x + y for x, y in zip(start_in_strip, end_in_strip)]
+    return full_in_strip, middle_in_strip, start_in_strip, end_in_strip
+
+
+def apply_rules(full, middle, start, end, q_low=0.3, q_up=0.6):
+    n = len(full)
+
+    full_low = np.quantile(full[:-10], q_low)
+    full_low = max(full_low, 2)
+    full_up = np.quantile(full[:-10], q_up)
+
+    start_threshold = np.quantile(start, 0.9)
+    end_threshold = np.quantile(end, 0.9)
+    middle_threshold = np.quantile(middle, 0.9)
+
+    labels = np.zeros(n)
+    prev_label = -1
+    for i in range(n):
+        if i < 2 or i > n - 5:
+            prev_label = -1
+            labels[i] = prev_label
+            continue
+        if full[i] <= 2:  # background
+            if end[i] > end_threshold or start[i] > start_threshold or middle[i] > middle_threshold:
+                prev_label = 1
+                labels[i] = prev_label
+                continue
+
+            prev_label = -1
+            labels[i] = prev_label
+            continue
+
+        if full[i] > full_up:  # pack
+            prev_label = 2
+            labels[i] = prev_label
+            continue
+
+        if end[i] > end_threshold or start[i] > start_threshold or middle[i] > middle_threshold:
+            prev_label = 1
+            labels[i] = prev_label
+            continue
+
+        if full[i] <= full_low:  # background
+            prev_label = -1
+            labels[i] = prev_label
+            continue
+
+        if i < 4 or i > n - 15:
+            labels[i] = -1
+            continue
+
+        if i > 3 and start[i - 1] > start_threshold or start[i - 2] > start_threshold:
+            prev_label = 2
+            labels[i] = prev_label
+            continue
+
+        labels[i] = prev_label
+    return labels
+
+
+def postproc_labels(labels):
+    new_labels = copy(labels)
+    n = len(labels)
+    for i in range(1, n - 1):  # сглаживаем случайный пик ...-1 х -1...
+        if labels[i] > 0 > labels[i - 1] and labels[i + 1] < 0:
+            new_labels[i] = -1
+
+    for i in range(1, n - 2):  # сглаживаем случайный пик ...-1 1 1 -1...
+        if labels[i] == 1 and labels[i + 1] == 1 and labels[i - 1] == -1 and labels[i + 2] == -1:
+            new_labels[i] = -1
+            new_labels[i + 1] = -1
+
+    def find_packs(labels):
+        packs = []
+        start = None
+        for i in range(1, n):
+            if labels[i] == 2 and start is None:
+                start = i
+            if start is not None and labels[i] != 2:
+                packs.append((i - start, start, i - 1))
+                start = None
+        return packs
+
+    def merge_pack(start, end):
+        for shift in range(2, 4):
+            left, right = None, None
+            if new_labels[start - shift] == 2:
+                left = start - shift + 1
+                right = start
+            elif new_labels[end + shift] == 2:
+                left = end
+                right = end + shift
+            if left is not None:
+                for i in range(left, right):
+                    new_labels[i] = 2
+                return True
+        return False
+
+    def delete_pack(start, end):
+        for i in range(start, end + 1):
+            new_labels[i] = -1
+
+    # слепляем плохие пачки
+    packs = find_packs(new_labels)
+    repeats = len(packs)
+    for _ in range(repeats):
+        packs = find_packs(new_labels)
+        min_pack = min(packs)
+
+        if min_pack[0] > 3 and len(packs) <= 5:
+            break
+        elif len(packs) < 3:
+            break
+
+        lenght, _, _ = min_pack
+        for l, s, e in sorted(packs):
+            if l != lenght:
+                break
+            if merge_pack(s, e):
+                break
+        packs = find_packs(new_labels)
+        min_pack = min(packs)
+        if len(packs) > 5:
+            if min_pack[0] <= 3:
+                delete_pack(min_pack[1], min_pack[2])
+            else:
+                merge_pack(min_pack[1], min_pack[2])
+
+    return new_labels
+
+
+def get_image_labels(path, q_low=0.3, q_up=0.6):
+    with open(path.joinpath("all_lines.json")) as file:
+        all_lines = json.load(file)
+    full_in_strip, middle_in_strip, start_in_strip, end_in_strip = count_line_metrics(all_lines)
+    labels = apply_rules(full_in_strip, middle_in_strip, start_in_strip, end_in_strip, q_low=q_low, q_up=q_up)
+    new_labels = postproc_labels(labels)
+    return new_labels
+
+
+def find_all_lines_for_each_track(path_list):
+    for p in tqdm(path_list):
+        local_path = DATA_DIR.joinpath("part_1").joinpath(p)
+        if not local_path.joinpath("all_lines.json").exists():
+            all_lines = all_lines_for_track(local_path)
+            with open(local_path.joinpath("all_lines.json"), "w") as file:
+                json.dump(all_lines, file, indent=4)
+
+
 if __name__ == '__main__':
-    # find all lines for each track
-    # with open(DATA_DIR.joinpath('good_paths.txt')) as f:
-    #     good_paths = f.readlines()
-    #     good_paths = [p.strip() for p in good_paths]
+    # with open(DATA_DIR.joinpath('valid_paths.txt')) as f:
+    #     valid_paths = f.readlines()
+    #     valid_paths = [p.strip() for p in valid_paths]
     #
-    # for p in tqdm(good_paths):
-    #     path = DATA_DIR.joinpath("part_1").joinpath(p)
-    #     all_lines = all_lines_for_track(path)
-    #     with open(path.joinpath("all_lines.json"), "w") as file:
-    #         json.dump(all_lines, file, indent=4)
+    # find_all_lines_for_each_track(valid_paths)
     pass
