@@ -7,19 +7,9 @@ import pandas as pd
 from definitions import DATA_DIR
 
 
-def fix_front_image_names(path):
-    path = Path(path)
-    names = path.glob("front*")
-
-    pairs = []
-    max_i = 0
-    for p in names:
-        i = int(str(p.name).split('.')[0][5:])
-        max_i = max(max_i, i)
-        pairs.append((i, p))
-
-    pairs = sorted(pairs)
-    for new_i, (i, p) in enumerate(pairs):
+def fix_front_image_names(front_dir):
+    path_list = get_front_images_paths(front_dir)
+    for new_i, p in enumerate(path_list):
         os.rename(p, p.parent.joinpath(f'front{new_i}.jpg'))
 
 
@@ -39,6 +29,24 @@ def get_valid_paths(fix_front_names=False):
                 fix_front_image_names(local_path)
 
     return valid
+
+
+def get_front_images_paths(front_dir):
+    path = Path(front_dir)
+    names = path.glob("front*")
+    return sort_front_images_paths(names)
+
+
+def sort_front_images_paths(path_list):
+    pairs = []
+    max_i = 0
+    for p in path_list:
+        i = int(str(p.name).split('.')[0][5:])
+        max_i = max(max_i, i)
+        pairs.append((i, p))
+
+    pairs = sorted(pairs)
+    return [p[1] for p in pairs]
 
 
 if __name__ == '__main__':
