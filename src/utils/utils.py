@@ -1,9 +1,11 @@
 from pathlib import Path
 import os
+
+import numpy as np
 from tqdm import tqdm
 
 import pandas as pd
-
+import json
 from definitions import DATA_DIR
 
 
@@ -47,6 +49,12 @@ def sort_front_images_paths(path_list):
 
     pairs = sorted(pairs)
     return [p[1] for p in pairs]
+
+
+def get_labels(path):
+    with open(path.joinpath("info.json")) as file:
+        info = json.load(file)
+    return np.array(info['labels']).astype(int)
 
 
 if __name__ == '__main__':
