@@ -12,7 +12,9 @@ from definitions import DATA_DIR
 
 
 class FrontSequenceDataset(Dataset):
-    def __init__(self, path_list: Sequence[Union[str, Path]], n_strips: int = 5, scale: float = 0.25):
+    def __init__(self, path_list: Sequence[Union[str, Path]],
+                 n_strips: int = 5,
+                 scale: float = 0.25):
         super().__init__()
         self.path_list = path_list  # лесовозы
         self.n_strips = n_strips
