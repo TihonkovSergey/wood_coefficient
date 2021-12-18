@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = ROOT_DIR.joinpath("data")
+CHECKPOINTS_DIR = DATA_DIR.joinpath("checkpoints")
 
 SEED = 0
 
