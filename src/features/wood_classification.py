@@ -21,7 +21,7 @@ def train(model: torch.nn.Module,
           device="cpu",
           save_freq: int = 1,
           epochs: int = 100,
-          verbose: bool = True) -> Tuple[List[int], List[int]]:
+          verbose: bool = True) -> Tuple[List[float], List[float]]:
     train_loss_list = []
     val_loss_list = []
     for epoch in tqdm(range(1, epochs + 1), total=epochs):
