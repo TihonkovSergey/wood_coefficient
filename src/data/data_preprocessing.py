@@ -7,7 +7,7 @@ import cv2
 from definitions import DISTORTION_COEFFICIENTS
 
 
-def undistort_image(img: np.ndarray):
+def undistort_image(img: np.ndarray) -> np.ndarray:
     w = img.shape[1]
     h = img.shape[0]
     focus = 10
@@ -19,25 +19,27 @@ def undistort_image(img: np.ndarray):
     return cv2.undistort(img, calibration_matrix, DISTORTION_COEFFICIENTS)
 
 
-def down_scale_image(img: np.ndarray, scale: float = 1.):
+def down_scale_image(img: np.ndarray, scale: float = 1.) -> np.ndarray:
     new_w = int(img.shape[1] * scale)
     new_h = int(img.shape[0] * scale)
     return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
-def prepare_image(img, undistort=True, scale: float = 1.):
+def prepare_image(img: np.ndarray,
+                  undistort: bool = True,
+                  scale: float = 1.) -> np.ndarray:
     undistorted_img = undistort_image(img) if undistort else img
     return down_scale_image(undistorted_img, scale)
 
 
-def get_middle_strip(img, n_strips=5):
+def get_middle_strip(img: np.ndarray, n_strips: int = 5) -> np.ndarray:
     w = img.shape[1]
     left_strip_bound = (w // 2) - int(w / (2 * n_strips))
     right_strip_bound = (w // 2) + int(w / (2 * n_strips))
     return img[:, left_strip_bound: right_strip_bound]
 
 
-def filter_image(img):
+def filter_image(img: np.ndarray) -> np.ndarray:
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     size = 10
     kern = cv2.getGaborKernel(

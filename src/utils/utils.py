@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Iterable
 
 import numpy as np
 from tqdm import tqdm
@@ -11,13 +11,13 @@ from src.data.pack_info import get_packs
 from definitions import DATA_DIR
 
 
-def fix_front_image_names(front_dir):
+def fix_front_image_names(front_dir: Union[str, Path]) -> None:
     path_list = get_front_images_paths(front_dir)
     for new_i, p in enumerate(path_list):
         os.rename(p, p.parent.joinpath(f'front{new_i}.jpg'))
 
 
-def get_valid_paths(fix_front_names=False):
+def get_valid_paths(fix_front_names: bool = False) -> List[str]:
     table_nek = pd.read_csv(DATA_DIR.joinpath("table_nek_2020_01.csv"))
     path_list = sorted(table_nek.path.unique())
 
@@ -35,16 +35,17 @@ def get_valid_paths(fix_front_names=False):
     return valid
 
 
-def get_front_images_paths(front_dir):
+def get_front_images_paths(front_dir: Union[str, Path]) -> List[Path]:
     path = Path(front_dir)
     names = path.glob("front*")
     return sort_front_images_paths(names)
 
 
-def sort_front_images_paths(path_list):
+def sort_front_images_paths(path_list: Iterable[Union[str, Path]]) -> List[Path]:
     pairs = []
     max_i = 0
-    for p in path_list:
+    for path in path_list:
+        p = Path(path)
         i = int(str(p.name).split('.')[0][5:])
         max_i = max(max_i, i)
         pairs.append((i, p))
@@ -53,13 +54,15 @@ def sort_front_images_paths(path_list):
     return [p[1] for p in pairs]
 
 
-def get_labels(path):
-    with open(path.joinpath("info.json")) as file:
+def get_labels(path: Union[str, Path]):
+    with open(Path(path).joinpath("info.json")) as file:
         info = json.load(file)
     return np.array(info['labels']).astype(int)
 
 
-def get_pack_paths(track_dir: Union[str, Path], pack_count: int, max_number_per_pack: int = 5) -> List[List[Path]]:
+def get_pack_paths(track_dir: Union[str, Path],
+                   pack_count: int,
+                   max_number_per_pack: int = 5) -> List[List[Path]]:
     with open(Path(track_dir).joinpath("info.json")) as f:
         info = json.load(f)
 
@@ -76,7 +79,7 @@ def get_pack_paths(track_dir: Union[str, Path], pack_count: int, max_number_per_
             images = images[1:-1]
 
         numbers = np.random.choice(images, min(len(images), max_number_per_pack), replace=False)
-        path_list.append([track_dir.joinpath(f'FrontJPG/front{n}.jpg') for n in numbers])
+        path_list.append([Path(track_dir).joinpath(f'FrontJPG/front{n}.jpg') for n in numbers])
 
     return path_list
 

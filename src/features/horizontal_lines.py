@@ -1,15 +1,11 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 import json
 from copy import copy
 from pathlib import Path
 from tqdm import tqdm
+from typing import Union, List, Tuple, Sequence
+
+import numpy as np
 import cv2
-import imageio
-import imutils
 from joblib import Parallel, delayed
 
 from src.data.data_load import get_image_by_path
@@ -17,7 +13,7 @@ from src.data.data_preprocessing import get_middle_strip, filter_image
 from definitions import DATA_DIR, N_STRIPS
 
 
-def get_lines_from_image(img):
+def get_lines_from_image(img: np.ndarray) -> Tuple[Sequence, np.ndarray]:
     img_middle_colors = get_middle_strip(img)
     filtered_img = filter_image(img_middle_colors)
 
@@ -28,8 +24,9 @@ def get_lines_from_image(img):
     return lines, img_middle_with_lines
 
 
-def get_lines_from_image_connectivity(img, return_used=False):
-    def fill_component(x, y, color):
+def get_lines_from_image_connectivity(img: np.ndarray,
+                                      return_used: bool = False) -> Union[List[dict], Tuple[List[dict], np.ndarray]]:
+    def fill_component(x: int, y: int, color: int) -> dict:
         min_x, max_x = w, 0
         min_y, max_y = h, 0
 
@@ -72,8 +69,8 @@ def get_lines_from_image_connectivity(img, return_used=False):
     return line_info_list
 
 
-def all_lines_for_track(path, scale=0.25):
-    def pipeline(path, scale):
+def all_lines_for_track(path: Union[str, Path], scale: float = 0.25) -> dict:
+    def pipeline(path: Union[str, Path], scale: float) -> List[dict]:
         img = get_image_by_path(path, scale=scale, prepared=True)
         filtered_img = filter_image(img)
         return get_lines_from_image_connectivity(filtered_img)
@@ -101,7 +98,8 @@ def all_lines_for_track(path, scale=0.25):
         }
 
 
-def count_line_metrics(all_lines, w=480):
+def count_line_metrics(all_lines: dict,
+                       w: int = 480) -> Tuple[List[int], List[int], List[int], List[int]]:
     left_strip_bound = (w // 2) - int(w / (2 * N_STRIPS))
     right_strip_bound = (w // 2) + int(w / (2 * N_STRIPS))
     w_strip = right_strip_bound - left_strip_bound
@@ -140,7 +138,12 @@ def count_line_metrics(all_lines, w=480):
     return full_in_strip, middle_in_strip, start_in_strip, end_in_strip
 
 
-def apply_rules(full, middle, start, end, q_low=0.3, q_up=0.6):
+def apply_rules(full: Union[np.ndarray, List[int]],
+                middle: Union[np.ndarray, List[int]],
+                start: Union[np.ndarray, List[int]],
+                end: Union[np.ndarray, List[int]],
+                q_low: float = 0.3,
+                q_up: float = 0.6) -> np.ndarray:
     n = len(full)
 
     full_low = np.quantile(full[:-10], q_low)
@@ -196,7 +199,7 @@ def apply_rules(full, middle, start, end, q_low=0.3, q_up=0.6):
     return labels
 
 
-def postproc_labels(labels):
+def postproc_labels(labels: Union[np.ndarray, List[int]]) -> Union[np.ndarray, List[int]]:
     new_labels = copy(labels)
     n = len(labels)
     for i in range(1, n - 1):  # сглаживаем случайный пик ...-1 х -1...
@@ -267,8 +270,10 @@ def postproc_labels(labels):
     return new_labels
 
 
-def get_image_labels(path, q_low=0.3, q_up=0.6):
-    with open(path.joinpath("all_lines.json")) as file:
+def get_image_labels(path: Union[str, Path],
+                     q_low: float = 0.3,
+                     q_up: float = 0.6) -> Union[np.ndarray, List[int]]:
+    with open(Path(path).joinpath("all_lines.json")) as file:
         all_lines = json.load(file)
     full_in_strip, middle_in_strip, start_in_strip, end_in_strip = count_line_metrics(all_lines)
     labels = apply_rules(full_in_strip, middle_in_strip, start_in_strip, end_in_strip, q_low=q_low, q_up=q_up)
@@ -276,7 +281,7 @@ def get_image_labels(path, q_low=0.3, q_up=0.6):
     return new_labels
 
 
-def find_all_lines_for_each_track(path_list):
+def find_all_lines_for_each_track(path_list: List[str]) -> None:
     for p in tqdm(path_list):
         local_path = DATA_DIR.joinpath("part_1").joinpath(p)
         if not local_path.joinpath("all_lines.json").exists():
