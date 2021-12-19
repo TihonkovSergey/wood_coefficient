@@ -8,6 +8,7 @@ from tqdm import tqdm
 import pandas as pd
 import json
 from src.data.pack_info import get_packs
+from src.data.data_load import get_image_by_path
 from definitions import DATA_DIR
 
 
@@ -62,14 +63,17 @@ def get_labels(path: Union[str, Path]):
 
 def get_pack_paths(track_dir: Union[str, Path],
                    pack_count: int,
-                   max_number_per_pack: int = 5) -> List[List[Path]]:
-    with open(Path(track_dir).joinpath("info.json")) as f:
+                   max_number_per_pack: int = 5,
+                   info_file_name: str = "info",
+                   return_numbers: bool = False) -> Union[List[List[Path]], Tuple[List[List[Path]], List[np.ndarray]]]:
+    with open(Path(track_dir).joinpath(f"{info_file_name}.json")) as f:
         info = json.load(f)
 
     if info['pack_count'] == 0:
         return []
 
     path_list = []
+    numbers_list = []
 
     for i in range(pack_count):
         idx = i if i < info['pack_count'] else info['pack_count'] - 1
@@ -80,7 +84,9 @@ def get_pack_paths(track_dir: Union[str, Path],
 
         numbers = np.random.choice(images, min(len(images), max_number_per_pack), replace=False)
         path_list.append([Path(track_dir).joinpath(f'FrontJPG/front{n}.jpg') for n in numbers])
-
+        numbers_list.append(numbers)
+    if return_numbers:
+        return path_list, numbers_list
     return path_list
 
 
@@ -101,6 +107,20 @@ def get_paths_and_labels_for_sort_cls(track_paths: List[str]) -> Tuple[List[Path
                     train_img_paths.append(img_path)
                     train_sort.append(sort)
     return train_img_paths, train_sort
+
+
+def get_pack_image(track_dir: Union[str, Path],
+                   pack_num: int,
+                   info_file_name: str = "info") -> Tuple[np.ndarray, int]:
+    with open(Path(track_dir).joinpath(f"{info_file_name}.json")) as f:
+        info = json.load(f)
+
+    if pack_num >= info["pack_count"]:
+        pack_num = info["pack_count"] - 1
+    pack_image_numbers = info["packs"][str(pack_num)]
+    n = pack_image_numbers[len(pack_image_numbers) // 2]  # middle image
+    img = get_image_by_path(Path(track_dir).joinpath(f"FrontJPG/front{n}.jpg"))
+    return img, n
 
 
 if __name__ == '__main__':
