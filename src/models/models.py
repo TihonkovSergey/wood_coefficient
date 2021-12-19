@@ -1,3 +1,7 @@
+from typing import Sequence
+
+import numpy as np
+import pandas as pd
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -85,3 +89,30 @@ class LSTMModelWithEncoder(nn.Module):
                 batch[i, :embedding.shape[0]] = embedding
 
         return self.lstm(batch)
+
+
+class DummyModel:
+    def __init__(self, method="global", sort_col="sort", target_name="k"):
+        self.method = method
+        self.sort_col = sort_col
+        self.target_name = target_name
+        self.d = None
+
+    def fit(self, X: pd.DataFrame, y: Sequence):
+        if self.method == "global":
+            self.d = np.mean(y)
+        elif self.method == "sort":
+            df = X.copy()
+            df[self.target_name] = y
+            self.d = dict(df.groupby(self.sort_col)[self.target_name].agg("mean"))
+        else:
+            raise NotImplementedError()
+
+    def predict(self, X):
+        if self.method == "global":
+            result = np.full(len(X), self.d)
+        elif self.method == "sort":
+            result = np.array(X[self.sort_col].apply(lambda x: self.d[x]))
+        else:
+            raise NotImplementedError()
+        return result
